@@ -5,7 +5,7 @@ documentation = "https://docs.rs/lib-bspwm"
 edition = "2021"
 keywords = [ "bspwm", "xorg" ]
 license = "MIT OR Apache-2.0"
-name = "lib-bpswm"
+name = "lib-bspwm"
 repository = "https://github.com/aidenlangley/lib-bspwm"
 version = "0.1.0"
 
