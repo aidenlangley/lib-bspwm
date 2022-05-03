@@ -10,5 +10,6 @@ repository = "https://github.com/aidenlangley/lib-bspwm"
 version = "0.1.0"
 
 [dependencies]
-serde = { version = "1.0.136", features = [ "derive" ] }
-serde_json = "1.0.79"
+serde = { version = "1.0", features = [ "derive" ] }
+serde_json = "1.0"
+thiserror = "1.0"

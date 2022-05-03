@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{fmt::Display, process::Command};
+use thiserror::Error;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -190,4 +191,220 @@ pub struct Client {
     pub shown: bool,
     pub tiled_rectangle: Rectangle,
     pub floating_rectangle: Rectangle,
+}
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("Failed to deserialize output from `bspc wm -d` or `bspc query <DOMAIN>`")]
+    Deserialize,
+
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+}
+
+const PROG: &'static str = "bspc";
+const DUMP_ARGS: &'static [&'static str; 2] = &["wm", "-d"];
+const QUERY_ARGS: &'static [&'static str; 1] = &["query"];
+const QUERY_TREE_FLAG: &'static str = "-T";
+const MON_SEL_QUERY_FLAG: &'static str = "-m";
+const DESK_SEL_QUERY_FLAG: &'static str = "-d";
+const NODE_SEL_QUERY_FLAG: &'static str = "-n";
+const _MON_ID_OUT_FLAG: &'static str = "-M";
+const _DESK_ID_OUT_FLAG: &'static str = "-D";
+const _NODE_ID_OUT_FLAG: &'static str = "-N";
+
+pub fn dump_state() -> Result<State, self::Error> {
+    match serde_json::from_slice::<State>(&Command::new(PROG).args(DUMP_ARGS).output()?.stdout) {
+        Ok(state) => Ok(state),
+        Err(_) => Err(self::Error::Deserialize),
+    }
+}
+
+#[derive(Debug)]
+pub struct Query {
+    args: Vec<String>,
+}
+
+impl Query {
+    pub fn new() -> Self {
+        Self {
+            args: QUERY_ARGS.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    pub fn monitor(mut self, name: &str) -> Self {
+        if name.is_empty() {
+            return self;
+        }
+
+        // Make a new Vec so that we're aren't passing multiple domain selectors.
+        // `bspc` doesn't like it.
+        let mut args: Vec<String> = QUERY_ARGS.iter().map(|s| s.to_string()).collect();
+        args.push(MON_SEL_QUERY_FLAG.to_string());
+        args.push(name.to_string());
+        self.args = args;
+
+        self
+    }
+
+    pub fn desktop(mut self, name: &str) -> Self {
+        if name.is_empty() {
+            return self;
+        }
+
+        let mut args: Vec<String> = QUERY_ARGS.iter().map(|s| s.to_string()).collect();
+        args.push(DESK_SEL_QUERY_FLAG.to_string());
+        args.push(name.to_string());
+        self.args = args;
+
+        self
+    }
+
+    pub fn node(mut self, id: usize) -> Self {
+        let mut args: Vec<String> = QUERY_ARGS.iter().map(|s| s.to_string()).collect();
+        args.push(NODE_SEL_QUERY_FLAG.to_string());
+        args.push(id.to_string());
+        self.args = args;
+
+        self
+    }
+
+    fn _get_monitor_ids(&mut self) -> Vec<usize> {
+        self.args.push(_MON_ID_OUT_FLAG.to_string());
+        todo!()
+    }
+
+    fn _get_desktop_ids(&mut self) -> Vec<usize> {
+        self.args.push(_DESK_ID_OUT_FLAG.to_string());
+        todo!()
+    }
+
+    fn _get_node_ids(&mut self) -> Vec<usize> {
+        self.args.push(_NODE_ID_OUT_FLAG.to_string());
+        todo!()
+    }
+
+    pub fn get_monitor_tree(&mut self) -> Result<Monitor, self::Error> {
+        // `bspc` requires at least one domain flag, even if it's passed
+        // parameter-less, so here we count the flags and add a single `-m` if
+        // necessary.
+        if self.args.len() == 1 {
+            self.args.push(MON_SEL_QUERY_FLAG.to_string());
+        }
+
+        self.args.push(QUERY_TREE_FLAG.to_string());
+        match serde_json::from_slice::<Monitor>(
+            &Command::new(PROG).args(&self.args).output()?.stdout,
+        ) {
+            Ok(m) => Ok(m),
+            Err(_) => Err(self::Error::Deserialize),
+        }
+    }
+
+    pub fn get_desktop_tree(&mut self) -> Result<Desktop, self::Error> {
+        if self.args.len() == 1 {
+            self.args.push(DESK_SEL_QUERY_FLAG.to_string());
+        }
+
+        self.args.push(QUERY_TREE_FLAG.to_string());
+        match serde_json::from_slice::<Desktop>(
+            &Command::new(PROG).args(&self.args).output()?.stdout,
+        ) {
+            Ok(d) => Ok(d),
+            Err(_) => Err(self::Error::Deserialize),
+        }
+    }
+
+    pub fn get_node_tree(&mut self) -> Result<Node, self::Error> {
+        if self.args.len() == 1 {
+            self.args.push(NODE_SEL_QUERY_FLAG.to_string());
+        }
+
+        self.args.push(QUERY_TREE_FLAG.to_string());
+        match serde_json::from_slice::<Node>(&Command::new(PROG).args(&self.args).output()?.stdout)
+        {
+            Ok(n) => Ok(n),
+            Err(_) => Err(self::Error::Deserialize),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::process::Command;
+
+    use crate::{dump_state, Query, DUMP_ARGS, PROG, QUERY_ARGS};
+
+    #[test]
+    fn dump_args() {
+        let mut args = vec![PROG];
+        for arg in DUMP_ARGS {
+            args.push(arg)
+        }
+
+        assert_eq!(args, vec![PROG, "wm", "-d"])
+    }
+
+    #[test]
+    fn query_args() {
+        let mut args = vec![PROG];
+        for arg in QUERY_ARGS {
+            args.push(arg)
+        }
+
+        assert_eq!(args, vec![PROG, "query"])
+    }
+
+    #[test]
+    fn outputs() {
+        if let Err(e) = Command::new(PROG).args(DUMP_ARGS).output() {
+            assert!(false, "{}", e)
+        }
+    }
+
+    #[test]
+    fn deserializes() {
+        if let Err(e) = dump_state() {
+            assert!(false, "{}", e)
+        }
+    }
+
+    #[test]
+    fn monitor_tree() {
+        let mut query = Query::new();
+        if let Err(e) = query.get_monitor_tree() {
+            eprintln!("{:#?}", query);
+            assert!(false, "{}", e)
+        }
+    }
+
+    #[test]
+    fn desktop_tree() {
+        let mut query = Query::new();
+        if let Err(e) = query.get_desktop_tree() {
+            eprintln!("{:#?}", query);
+            assert!(false, "{}", e)
+        }
+    }
+
+    #[test]
+    fn node_tree() {
+        let mut query = Query::new();
+        if let Err(e) = query.get_node_tree() {
+            eprintln!("{:#?}", query);
+            assert!(false, "{}", e)
+        }
+    }
+
+    #[test]
+    fn with_param() {
+        let query = Query::new().monitor("testies");
+        assert_eq!(query.args, vec!["query", "-m", "testies"])
+    }
+
+    #[test]
+    fn try_many_param() {
+        let query = Query::new().monitor("discarded").monitor("testies");
+        assert_eq!(query.args, vec!["query", "-m", "testies"])
+    }
 }
