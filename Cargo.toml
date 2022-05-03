@@ -7,7 +7,7 @@ keywords = [ "bspwm", "xorg" ]
 license = "MIT OR Apache-2.0"
 name = "lib-bspwm"
 repository = "https://github.com/aidenlangley/lib-bspwm"
-version = "0.1.0"
+version = "0.1.1"
 
 [dependencies]
 serde = { version = "1.0", features = [ "derive" ] }
